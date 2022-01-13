@@ -3,7 +3,7 @@ use std::fs;
 use directories::ProjectDirs;
 use serde::{de::DeserializeOwned, Serialize};
 
-fn store_local_data<'a, T: Serialize + DeserializeOwned>(data: &T, project_name: &str, file_path_name: &str) -> Result<(), String> {
+fn store_local_data(data: &[u8], project_name: &str, file_path_name: &str) -> Result<(), String> {
 	if let Some(dir_string) = resolve_path(project_name) {
 		println!("{:?}", &dir_string);
 		fs::create_dir(&dir_string.1).unwrap();
@@ -17,7 +17,7 @@ fn store_local_data<'a, T: Serialize + DeserializeOwned>(data: &T, project_name:
 			Err(format!("Cannot parse struct"))
 		}
 	} else {
-		Err(format!("Cannot resolve {} to path", project_name))
+		Err(format!("Cannot resolve {project_name} to path"))
 	}
 }
 
@@ -62,7 +62,7 @@ mod test {
 			number: 1,
 			string: "string".to_string(),
 		};
-		store_local_data(&test_struct, "duckstore", "cache.bin").unwrap();
+		store_local_data(&serde_json::to_vec(&test_struct).unwrap(), "duckstore", "cache.bin").unwrap();
 		let retrieved = load_local_data("duckstore", "cache.bin").unwrap();
 
 		assert_eq!(serde_json::from_slice::<TestStruct>(&retrieved).unwrap(), test_struct)

@@ -31,7 +31,7 @@ pub enum DirType {
 	Cache,
 }
 
-fn store(data: &[u8], store_config: &StoreConfig) -> Result<StorePaths, String> {
+pub fn store(data: &[u8], store_config: &StoreConfig) -> Result<StorePaths, String> {
 	if let Some(store_paths) = resolve_path(store_config) {
 
 		// Result is dropped as it might already exists
@@ -47,7 +47,7 @@ fn store(data: &[u8], store_config: &StoreConfig) -> Result<StorePaths, String> 
 	}
 }
 
-fn load(store_paths: &StorePaths) -> Result<Vec<u8>, String> {
+pub fn load(store_paths: &StorePaths) -> Result<Vec<u8>, String> {
 	if let Ok(from_reader) = fs::read(&store_paths.constructed_path) {
 		return Ok(from_reader);
 	} else {

@@ -2,6 +2,7 @@ use std::fs;
 
 use directories::BaseDirs;
 
+#[allow(dead_code)]
 /// This should be created from a constant to represent a persistent type of file and location
 #[derive(Debug)]
 pub struct StoreConfig<'a> {

@@ -28,20 +28,42 @@ pub enum DirType {
 	Cache,
 }
 
-pub fn store<'a>(data: &'a [u8], store_config: &'a PathConfig) -> Result<ResolvedPaths<'a>, String> {
-	if let Some(store_paths) = resolve_path(store_config) {
+impl<'a> PathConfig<'a> {
+	fn resolve(&self) -> Option<ResolvedPaths<'a>> {
+		if let Some(dirs) = BaseDirs::new() {
+			let base_dir;
+			match self.dir_type {
+				DirType::Data => {
+					base_dir = dirs.data_dir();
+				}
+				DirType::Config => {
+					base_dir = dirs.config_dir();
+				}
+				DirType::Cache => {
+					base_dir = dirs.cache_dir();
+				}
+			}
+			if let Some(base_str) = base_dir.to_str() {
+				let config = *self;
+				return Some(ResolvedPaths {
+					config,
+					constructed_path: format!("{}/{}/{}/{}", base_str, self.base_prefix, self.sub_folder, self.file_name),
+				});
+			}
+		}
+		None
+	}
+}
 
+pub fn store<'a>(data: &'a [u8], resolved_path: &'a ResolvedPaths) -> Result<(), String> {
 		// Result is dropped as it might already exists
-		let _ = fs::create_dir_all(&format!("{}/{}/{}", store_paths.config.base_prefix, store_paths.config.sub_folder, store_paths.config.file_name));
+		let _ = fs::create_dir_all(&format!("{}/{}/{}", resolved_path.config.base_prefix, resolved_path.config.sub_folder, resolved_path.config.file_name));
 
-		if let Err(error) = fs::write(&store_paths.constructed_path, data) {
+		if let Err(error) = fs::write(&resolved_path.constructed_path, data) {
 			Err(format!("{}", error))
 		} else {
-			Ok(store_paths)
+			Ok(())
 		}
-	} else {
-		Err(format!("Cannot resolve {:#?} to path", store_config))
-	}
 }
 
 pub fn load(store_paths: &ResolvedPaths) -> Result<Vec<u8>, String> {
@@ -50,31 +72,6 @@ pub fn load(store_paths: &ResolvedPaths) -> Result<Vec<u8>, String> {
 	} else {
 		Err(format!("Failed to read file"))
 	}
-}
-
-fn resolve_path<'a>(store_config: &'a PathConfig) -> Option<ResolvedPaths<'a>> {
-	if let Some(dirs) = BaseDirs::new() {
-		let base_dir;
-		match store_config.dir_type {
-			DirType::Data => {
-				base_dir = dirs.data_dir();
-			}
-			DirType::Config => {
-				base_dir = dirs.config_dir();
-			}
-			DirType::Cache => {
-				base_dir = dirs.cache_dir();
-			}
-		}
-		if let Some(base_str) = base_dir.to_str() {
-			let config = *store_config;
-			return Some(ResolvedPaths {
-				config,
-				constructed_path: format!("{}/{}/{}/{}", base_str, store_config.base_prefix, store_config.sub_folder, store_config.file_name),
-			});
-		}
-	}
-	None
 }
 
 #[cfg(test)]
@@ -89,10 +86,12 @@ mod test {
 			file_name: "data.bin",
 			dir_type: &DirType::Data,
 		};
-		let result = store(b"Yes", &CFG).unwrap();
+		let resolved = &CFG.resolve().unwrap();
 
-		let loaded = load(&result).unwrap();
-		println!("{}", result.constructed_path);
+		store(b"Yes", resolved).unwrap();
+
+		let loaded = load(resolved).unwrap();
+		println!("{}", resolved.constructed_path);
 
 		assert_eq!("Yes", String::from_utf8(loaded).unwrap())
 	}

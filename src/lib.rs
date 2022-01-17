@@ -5,16 +5,17 @@ use directories::BaseDirs;
 /// This should be created from a constant to represent a persistent type of file and location
 #[derive(Debug, Clone, Copy)]
 pub struct PathConfig<'a> {
-	base_prefix: &'a str,
-	sub_folder: &'a str,
-	file_name: &'a str,
-	dir_type: &'a DirType,
+	pub project_prefix: &'a str,
+	pub sub_folder: &'a str,
+	pub file_name: &'a str,
+	pub dir_type: &'a DirType,
 }
 
 // This path should be created statically at runtime initialization
 #[derive(Debug, Clone)]
 pub struct ResolvedPaths<'a> {
 	pub config: PathConfig<'a>,
+	pub base_path: String,
 	pub constructed_path: String,
 }
 
@@ -29,7 +30,7 @@ pub enum DirType {
 }
 
 impl<'a> PathConfig<'a> {
-	fn resolve(&self) -> Option<ResolvedPaths<'a>> {
+	fn resolve(&self) -> Result<ResolvedPaths<'a>, String> {
 		if let Some(dirs) = BaseDirs::new() {
 			let base_dir;
 			match self.dir_type {
@@ -44,53 +45,57 @@ impl<'a> PathConfig<'a> {
 				}
 			}
 			if let Some(base_str) = base_dir.to_str() {
+				if let Err(err) = fs::create_dir_all(format!("{}/{}/{}", &base_str, &self.project_prefix, &self.sub_folder)) {
+					return Err(format!("{}", err))
+				}
+
 				let config = *self;
-				return Some(ResolvedPaths {
+				return Ok(ResolvedPaths {
 					config,
-					constructed_path: format!("{}/{}/{}/{}", base_str, self.base_prefix, self.sub_folder, self.file_name),
+					base_path: base_str.to_string(),
+					constructed_path: format!("{}/{}/{}/{}", &base_str, self.project_prefix, self.sub_folder, self.file_name),
 				});
 			}
 		}
-		None
+		Err("Cannot resolve basic directories".to_owned())
 	}
 }
 
-pub fn store<'a>(data: &'a [u8], resolved_path: &'a ResolvedPaths) -> Result<(), String> {
-		// Result is dropped as it might already exists
-		let _ = fs::create_dir_all(&format!("{}/{}/{}", resolved_path.config.base_prefix, resolved_path.config.sub_folder, resolved_path.config.file_name));
-
-		if let Err(error) = fs::write(&resolved_path.constructed_path, data) {
+impl<'a> ResolvedPaths<'a> {
+	pub fn store(&self, data: &[u8]) -> Result<(), String> {
+		if let Err(error) = fs::write(&self.constructed_path, data) {
 			Err(format!("{}", error))
 		} else {
 			Ok(())
 		}
-}
+	}
 
-pub fn load(store_paths: &ResolvedPaths) -> Result<Vec<u8>, String> {
-	if let Ok(from_reader) = fs::read(&store_paths.constructed_path) {
-		return Ok(from_reader);
-	} else {
-		Err(format!("Failed to read file"))
+	pub fn load(&self) -> Result<Vec<u8>, String> {
+		if let Ok(from_reader) = fs::read(&self.constructed_path) {
+			Ok(from_reader)
+		} else {
+			Err("Failed to read file".to_string())
+		}
 	}
 }
 
 #[cfg(test)]
 mod test {
-	use crate::{DirType, load, store, PathConfig};
+	use crate::{DirType, PathConfig};
 
 	#[test]
 	fn yes() {
 		const CFG: PathConfig = PathConfig {
-			base_prefix: "duckstore",
+			project_prefix: "duckstore",
 			sub_folder: "data",
 			file_name: "data.bin",
 			dir_type: &DirType::Data,
 		};
 		let resolved = &CFG.resolve().unwrap();
 
-		store(b"Yes", resolved).unwrap();
+		resolved.store(b"Yes").unwrap();
 
-		let loaded = load(resolved).unwrap();
+		let loaded = resolved.load().unwrap();
 		println!("{}", resolved.constructed_path);
 
 		assert_eq!("Yes", String::from_utf8(loaded).unwrap())

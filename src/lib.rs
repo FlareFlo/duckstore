@@ -3,25 +3,22 @@ use std::fs;
 use directories::BaseDirs;
 
 /// This should be created from a constant to represent a persistent type of file and location
-#[derive(Debug)]
-pub struct StoreConfig<'a> {
-	project_name: &'a str,
-	folder: &'a str,
+#[derive(Debug, Clone, Copy)]
+pub struct PathConfig<'a> {
+	base_prefix: &'a str,
+	sub_folder: &'a str,
 	file_name: &'a str,
 	dir_type: &'a DirType,
 }
 
-// This path should be created statically at runtime
-#[derive(Debug)]
-pub struct StorePaths {
-	pub base_prefix: String,
-	pub project_name: String,
-	pub sub_folder: String,
-	pub file: String,
+// This path should be created statically at runtime initialization
+#[derive(Debug, Clone)]
+pub struct ResolvedPaths<'a> {
+	pub config: PathConfig<'a>,
 	pub constructed_path: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum DirType {
 	/// Resolves to Roaming AppData or $HOME/.local/share
 	Data,
@@ -31,11 +28,11 @@ pub enum DirType {
 	Cache,
 }
 
-pub fn store(data: &[u8], store_config: &StoreConfig) -> Result<StorePaths, String> {
+pub fn store<'a>(data: &'a [u8], store_config: &'a PathConfig) -> Result<ResolvedPaths<'a>, String> {
 	if let Some(store_paths) = resolve_path(store_config) {
 
 		// Result is dropped as it might already exists
-		let _ = fs::create_dir_all(&format!("{}/{}/{}", store_paths.base_prefix, store_paths.project_name, store_paths.sub_folder));
+		let _ = fs::create_dir_all(&format!("{}/{}/{}", store_paths.config.base_prefix, store_paths.config.sub_folder, store_paths.config.file_name));
 
 		if let Err(error) = fs::write(&store_paths.constructed_path, data) {
 			Err(format!("{}", error))
@@ -47,7 +44,7 @@ pub fn store(data: &[u8], store_config: &StoreConfig) -> Result<StorePaths, Stri
 	}
 }
 
-pub fn load(store_paths: &StorePaths) -> Result<Vec<u8>, String> {
+pub fn load(store_paths: &ResolvedPaths) -> Result<Vec<u8>, String> {
 	if let Ok(from_reader) = fs::read(&store_paths.constructed_path) {
 		return Ok(from_reader);
 	} else {
@@ -55,7 +52,7 @@ pub fn load(store_paths: &StorePaths) -> Result<Vec<u8>, String> {
 	}
 }
 
-fn resolve_path(store_config: &StoreConfig) -> Option<StorePaths> {
+fn resolve_path<'a>(store_config: &'a PathConfig) -> Option<ResolvedPaths<'a>> {
 	if let Some(dirs) = BaseDirs::new() {
 		let base_dir;
 		match store_config.dir_type {
@@ -70,12 +67,10 @@ fn resolve_path(store_config: &StoreConfig) -> Option<StorePaths> {
 			}
 		}
 		if let Some(base_str) = base_dir.to_str() {
-			return Some(StorePaths {
-				base_prefix: base_str.to_string(),
-				project_name: store_config.project_name.to_string(),
-				sub_folder: store_config.folder.to_string(),
-				file: store_config.file_name.to_string(),
-				constructed_path: format!("{}/{}/{}/{}", base_str, store_config.project_name, store_config.folder, store_config.file_name),
+			let config = *store_config;
+			return Some(ResolvedPaths {
+				config,
+				constructed_path: format!("{}/{}/{}/{}", base_str, store_config.base_prefix, store_config.sub_folder, store_config.file_name),
 			});
 		}
 	}
@@ -84,19 +79,20 @@ fn resolve_path(store_config: &StoreConfig) -> Option<StorePaths> {
 
 #[cfg(test)]
 mod test {
-	use crate::{DirType, load, store, StoreConfig};
+	use crate::{DirType, load, store, PathConfig};
 
 	#[test]
 	fn yes() {
-		const CFG: StoreConfig = StoreConfig {
-			project_name: "duckstore",
-			folder: "data",
+		const CFG: PathConfig = PathConfig {
+			base_prefix: "duckstore",
+			sub_folder: "data",
 			file_name: "data.bin",
 			dir_type: &DirType::Data,
 		};
 		let result = store(b"Yes", &CFG).unwrap();
 
 		let loaded = load(&result).unwrap();
+		println!("{}", result.constructed_path);
 
 		assert_eq!("Yes", String::from_utf8(loaded).unwrap())
 	}

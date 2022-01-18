@@ -30,7 +30,7 @@ pub enum DirType {
 }
 
 impl<'a> PathConfig<'a> {
-	fn resolve(&self) -> Result<ResolvedPaths<'a>, String> {
+	pub fn resolve(&self) -> Result<ResolvedPaths<'a>, String> {
 		if let Some(dirs) = BaseDirs::new() {
 			let base_dir;
 			match self.dir_type {
